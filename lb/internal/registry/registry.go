@@ -4,11 +4,11 @@ import (
 	"errors"
 	"sync"
 
-	"../backend"
+	"go_loadbalancer/lb/internal/backend"
 )
 
 var (
-	ErrNotFound = errors.New("Backend not found")
+	ErrNotFound = errors.New("backend not found")
 )
 
 type BackendRegistry struct {
@@ -37,6 +37,7 @@ func (r *BackendRegistry) Remove(rawURL string) error {
 	for i, b := range r.backends {
 		if b.URL.String() == rawURL {
 			r.backends = append(r.backends[:i], r.backends[i+1:]...)
+			return nil
 		}
 	}
 
@@ -47,12 +48,15 @@ func (r *BackendRegistry) List() []*backend.Backend {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.backends
+	out := make([]*backend.Backend, len(r.backends))
+	copy(out, r.backends)
+
+	return out
 }
 
 func (r *BackendRegistry) AliveBackends() []*backend.Backend {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	alive := make([]*backend.Backend, 0)
 

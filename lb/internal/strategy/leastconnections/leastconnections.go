@@ -1,43 +1,60 @@
 package leastconnectionsgo
 
+import (
+	"go_loadbalancer/lb/internal/backend"
+	"sync"
+)
+
 type LeastConnections struct {
-	connections map[string]int
+	mu          sync.Mutex
+	connections map[*backend.Backend]int
 }
 
 func NewLeastConnections() *LeastConnections {
 	return &LeastConnections{
-		connections: make(map[string]int),
+		connections: make(map[*backend.Backend]int),
 	}
 }
 
-func (lc *LeastConnections) Next(instances []string) string {
-	if len(instances) == 0 {
-		return ""
+func (lc *LeastConnections) Next(backends []*backend.Backend) *backend.Backend {
+	lc.mu.Lock()
+	defer lc.mu.Unlock()
+
+	if len(backends) == 0 {
+		return nil
 	}
 
-	for _, inst := range instances {
-		if _, exists := lc.connections[inst]; !exists {
-			lc.connections[inst] = 0
+	var chosen *backend.Backend
+	minConn := int(^uint(0) >> 1)
+
+	for _, b := range backends {
+		if !b.IsAlive() {
+			continue
+		}
+
+		if _, exists := lc.connections[b]; !exists {
+			lc.connections[b] = 0
+		}
+
+		if lc.connections[b] < minConn {
+			minConn = lc.connections[b]
+			chosen = b
 		}
 	}
 
-	minInst := instances[0]
-	minConn := lc.connections[minInst]
-
-	for _, inst := range instances[1:] {
-		if lc.connections[inst] < minConn {
-			minConn = lc.connections[inst]
-			minInst = inst
-		}
+	if chosen != nil {
+		lc.connections[chosen]++
 	}
 
-	lc.connections[minInst]++
+	return chosen
 
-	return minInst
 }
 
-func (lc *LeastConnections) Done(instance string) {
-	if lc.connections[instance] > 0 {
-		lc.connections[instance]--
+func (lc *LeastConnections) Done(b *backend.Backend) {
+	lc.mu.Lock()
+	defer lc.mu.Unlock()
+
+	if lc.connections[b] > 0 {
+		lc.connections[b]--
 	}
 }

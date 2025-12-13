@@ -3,8 +3,6 @@ package circuitbreaker
 import (
 	"sync/atomic"
 	"time"
-
-	"../backend"
 )
 
 type State int32
@@ -20,6 +18,7 @@ type CircuitBreaker struct {
 	ResetTimeout     time.Duration
 	state            atomic.Int32
 	lastFailure      atomic.Int64
+	failures         atomic.Int32
 }
 
 func NewCircuitBreaker(threshold int32, resetTimeout time.Duration) *CircuitBreaker {
@@ -29,7 +28,6 @@ func NewCircuitBreaker(threshold int32, resetTimeout time.Duration) *CircuitBrea
 	}
 
 	cb.state.Store(int32(Closed))
-
 	return cb
 }
 
@@ -37,7 +35,7 @@ func (cb *CircuitBreaker) setState(s State) {
 	cb.state.Store(int32(s))
 }
 
-func (cb *CircuitBreaker) BeforeRequest(b *backend.Backend) bool {
+func (cb *CircuitBreaker) BeforeRequest() bool {
 	switch cb.State() {
 	case Open:
 		if time.Now().UnixNano()-cb.lastFailure.Load() > cb.ResetTimeout.Nanoseconds() {
@@ -47,7 +45,7 @@ func (cb *CircuitBreaker) BeforeRequest(b *backend.Backend) bool {
 		return false
 
 	case HalfOpen:
-		return false
+		return true
 	case Closed:
 		return true
 	}
@@ -55,21 +53,19 @@ func (cb *CircuitBreaker) BeforeRequest(b *backend.Backend) bool {
 	return true
 }
 
-func (cb *CircuitBreaker) AfterRequestSuccess(b *backend.Backend) {
+func (cb *CircuitBreaker) AfterRequestSuccess() {
 	if cb.State() == HalfOpen {
 		cb.setState(Closed)
-		b.ResetFailCount()
 	}
-	b.IncrementSuccessCount()
+	cb.failures.Store(0)
 }
 
-func (cb *CircuitBreaker) AfterRequestFailure(b *backend.Backend) {
-	b.IncrementFailCount()
+func (cb *CircuitBreaker) AfterRequestFailure() {
+	cb.failures.Add(1)
 	cb.lastFailure.Store(time.Now().UnixNano())
 
-	if b.FailCount() >= cb.FailureThreshold {
+	if cb.failures.Load() >= cb.FailureThreshold {
 		cb.setState(Open)
-		b.MarkDead()
 	}
 }
 

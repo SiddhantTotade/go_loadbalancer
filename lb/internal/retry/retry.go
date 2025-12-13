@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"../circuitbreaker"
-	"../registry"
-	"../strategy"
+	"go_loadbalancer/lb/internal/circuitbreaker"
+	"go_loadbalancer/lb/internal/registry"
+	"go_loadbalancer/lb/internal/strategy"
 )
 
 type ResponseRecorder struct {
@@ -110,13 +110,13 @@ func DoWithRetries(w http.ResponseWriter, req *http.Request, reg *registry.Backe
 		}
 
 		if attempted[target.URL.String()] && attempt > len(alive) {
-
+			continue
 		} else {
 			attempted[target.URL.String()] = true
 		}
 
 		if cb != nil {
-			if !cb.BeforeRequest(target) {
+			if !cb.BeforeRequest() {
 				lastErr = fmt.Errorf("circuit open for backend %s", target.URL.String())
 				target.MarkDead()
 				continue
@@ -132,7 +132,7 @@ func DoWithRetries(w http.ResponseWriter, req *http.Request, reg *registry.Backe
 
 			target.ResetFailCount()
 			if cb != nil {
-				cb.AfterRequestSuccess(target)
+				cb.AfterRequestSuccess()
 			}
 
 			return nil
@@ -143,7 +143,7 @@ func DoWithRetries(w http.ResponseWriter, req *http.Request, reg *registry.Backe
 		target.IncrementFailCount()
 
 		if cb != nil {
-			cb.AfterRequestFailure(target)
+			cb.AfterRequestFailure()
 		}
 
 		if attempt == policy.MaxAttempts {
@@ -153,10 +153,6 @@ func DoWithRetries(w http.ResponseWriter, req *http.Request, reg *registry.Backe
 
 		backoff := backoffDuration(policy.InitialBackoff, policy.MaxBackoff, attempt)
 		time.Sleep(backoff)
-	}
-
-	if lastErr != nil {
-		lastErr = errors.New("retry failed with unknown error")
 	}
 
 	http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)

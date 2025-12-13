@@ -3,8 +3,8 @@ package weightedroundrobin
 import (
 	"sync"
 
-	"../../backend"
-	"../../strategy"
+	"go_loadbalancer/lb/internal/backend"
+	"go_loadbalancer/lb/internal/strategy"
 )
 
 type WeightedBackend struct {
@@ -18,7 +18,7 @@ type WeightedRoundRobin struct {
 	mu       sync.Mutex
 }
 
-func New(weights map[*backend.Backend]int) strategy.Strategy {
+func NewWeightedRoundRobin(weights map[*backend.Backend]int) strategy.Strategy {
 	wrr := &WeightedRoundRobin{
 		backends: make([]*WeightedBackend, 0),
 	}
@@ -37,15 +37,20 @@ func (wrr *WeightedRoundRobin) Next(backends []*backend.Backend) *backend.Backen
 	wrr.mu.Lock()
 	defer wrr.mu.Unlock()
 
-	var best *WeightedBackend
+	var candidates []*WeightedBackend
 
-	for _, wb := range wrr.backends {
-		if !wb.B.IsAlive() {
-			continue
+	for _, b := range backends {
+		for _, wb := range wrr.backends {
+			if wb.B == b && b.IsAlive() {
+				wb.Current += wb.Weight
+				candidates = append(candidates, wb)
+				break
+			}
 		}
+	}
 
-		wb.Current += wb.Weight
-
+	var best *WeightedBackend
+	for _, wb := range candidates {
 		if best == nil || wb.Current > best.Current {
 			best = wb
 		}
@@ -55,8 +60,7 @@ func (wrr *WeightedRoundRobin) Next(backends []*backend.Backend) *backend.Backen
 		return nil
 	}
 
-	best.Current -= totalWeight(wrr.backends)
-
+	best.Current -= totalWeight(candidates)
 	return best.B
 }
 

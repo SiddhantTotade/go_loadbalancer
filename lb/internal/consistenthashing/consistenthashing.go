@@ -3,6 +3,7 @@ package consistenthashing
 import (
 	"hash/fnv"
 	"sort"
+	"strconv"
 )
 
 type vnode struct {
@@ -41,7 +42,7 @@ func hash(s string) uint32 {
 
 func (ch *ConsistentHash) addInstance(instance string) {
 	for i := 0; i < ch.replicas; i++ {
-		key := instance + "#" + string(rune(i))
+		key := instance + "#" + strconv.Itoa(i)
 		ch.ring = append(ch.ring, vnode{
 			hash:     hash(key),
 			instance: instance,

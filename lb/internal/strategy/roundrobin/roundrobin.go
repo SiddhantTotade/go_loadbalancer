@@ -3,9 +3,9 @@ package roundrobin
 import (
 	"sync/atomic"
 
-	"../../strategy"
+	"go_loadbalancer/lb/internal/strategy"
 
-	"../../backend"
+	"go_loadbalancer/lb/internal/backend"
 )
 
 type RoundRobin struct {
@@ -21,6 +21,6 @@ func (rr *RoundRobin) Next(backends []*backend.Backend) *backend.Backend {
 		return nil
 	}
 
-	idx := rr.counter.Add(1)
-	return backends[idx%uint64(len(backends))]
+	idx := (rr.counter.Add(1) - 1) % uint64(len(backends))
+	return backends[int(idx)]
 }

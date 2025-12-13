@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"sync/atomic"
 	"time"
+
+	"go_loadbalancer/lb/internal/circuitbreaker"
 )
 
 type Backend struct {
@@ -15,6 +17,8 @@ type Backend struct {
 	Transport *http.Transport
 	Failures  atomic.Int32
 	Successes atomic.Int32
+
+	CB *circuitbreaker.CircuitBreaker
 }
 
 func CreateNewBackend(rawURL string, timeout time.Duration) (*Backend, error) {
@@ -38,6 +42,7 @@ func CreateNewBackend(rawURL string, timeout time.Duration) (*Backend, error) {
 		URL:       parsed,
 		Proxy:     proxy,
 		Transport: transport,
+		CB:        circuitbreaker.NewCircuitBreaker(3, 5*time.Second),
 	}
 
 	b.Alive.Store(true)
@@ -64,3 +69,17 @@ func (b *Backend) FailCount() int32    { return b.Failures.Load() }
 func (b *Backend) IncrementSuccessCount() { b.Successes.Add(1) }
 func (b *Backend) ResetSuccessCount()     { b.Successes.Store(0) }
 func (b *Backend) SuccessCount() int32    { return b.Successes.Load() }
+
+func (b *Backend) RecordSuccess() {
+	b.IncrementSuccessCount()
+	b.CB.AfterRequestSuccess()
+}
+
+func (b *Backend) RecordFailure() {
+	b.IncrementFailCount()
+	b.CB.AfterRequestFailure()
+
+	if b.FailCount() >= b.CB.FailureThreshold {
+		b.MarkDead()
+	}
+}

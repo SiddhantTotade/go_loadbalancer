@@ -2,11 +2,12 @@ package health
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
-	"../backend"
-	"../registry"
+	"go_loadbalancer/lb/internal/backend"
+	"go_loadbalancer/lb/internal/registry"
 )
 
 type HealthChecker struct {
@@ -73,6 +74,8 @@ func (hc *HealthChecker) check() {
 func (hc *HealthChecker) ping(b *backend.Backend) bool {
 	req, _ := http.NewRequest("GET", b.URL.String(), nil)
 	resp, err := hc.client.Do(req)
+
+	fmt.Println("Pinging", b.URL.String(), "Alive?", err == nil)
 
 	if err != nil {
 		return false
