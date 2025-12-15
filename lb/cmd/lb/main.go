@@ -33,12 +33,7 @@ func main() {
 	limiter := ratelimit.NewTokenBucket(100, 50)
 
 	h := handler.NewHandler(reg, strat, 3, q)
-	h.Queue = q
 	h.GlobalLimiter = limiter
-
-	q.StartWorkers(5, func(req *queue.Request) {
-		h.ServeBackend(req.W, req.R)
-	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -47,8 +42,5 @@ func main() {
 	hc.Start(ctx)
 
 	log.Println("Load Balancer running on :8080")
-
-	if err := http.ListenAndServe(":8080", h); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(http.ListenAndServe(":8080", h))
 }
